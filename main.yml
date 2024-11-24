@@ -1,0 +1,46 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main  # Trigger pipeline on pushes to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+
+    - name: Copy files to EC2
+      run: |
+        scp -o StrictHostKeyChecking=no -r ./* ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:/home/ec2-user/Api-Server
+
+    - name: SSH and deploy Docker
+      env:
+        DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
+      run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            cd /home/${{ secrets.AWS_USER}}/Api-Server
+            DOCKER_IMAGE_NAME="api-server"
+
+
+            sudo docker stop api_server_container || true
+            sudo docker rm api_server_container || true
+            sudo docker rmi $DOCKER_IMAGE_NAME || true
+
+            echo "Building Docker image: $DOCKER_IMAGE_NAME"
+            docker build -t $DOCKER_IMAGE_NAME .
+            
+            echo "Running Docker container: $DOCKER_IMAGE_NAME"
+            sudo docker run -d --name api_server_container -p 80:5000 $DOCKER_IMAGE_NAME
+          EOF
+
+    - name: Notify deployment success
+      run: echo "Deployment to EC2 was successful!"

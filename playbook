@@ -1,0 +1,42 @@
+- name: Configure EC2 instance and install Docker
+  hosts: app_server
+  become: true
+  tasks:
+    - name: Install prerequisites based on OS
+      block:
+        - name: Update and upgrade packages on Ubuntu
+          apt:
+            update_cache: yes
+            upgrade: yes
+          when: ansible_facts['os_family'] == "Debian"
+
+        - name: Update and install packages on Amazon Linux
+          yum:
+            name: docker
+            state: present
+          when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Install Git
+      package:
+        name: git
+        state: present
+
+    - name: Clone the Api-Server repository
+      git:
+        repo: https://github.com/Mannan-24/Api-Server.git
+        dest: /home/ec2-user/Api-Server
+
+    - name: Build the Docker image
+      command: docker build -t api-server /home/ec2-user/Api-Server
+      args:
+        chdir: /home/ec2-user/Api-Server
+
+    - name: Run the Docker container
+      command: docker run -d --name api_server_container -p 80:5000 api-server
+
